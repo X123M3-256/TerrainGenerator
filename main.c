@@ -7,6 +7,8 @@
 typedef struct
 {
 int height;
+int water_level;
+int sediment;
 }terrain_cell_t;
 
 terrain_cell_t terrain[SIZE][SIZE];
@@ -18,7 +20,8 @@ int x,y;
     for(x=0;x<SIZE;x++)
     for(y=0;y<SIZE;y++)
     {
-    terrain[x][y].height=100;
+    terrain[x][y].height=x>40&&x<60&&y>40&&y<60?2000:0;
+    terrain[x][y].water_level=10;
     }
 }
 
@@ -32,7 +35,9 @@ int y,x;
     {
         for(x=0;x<SIZE;x++)
         {
+        pixels[x*4]=terrain[x][y].water_level>terrain[x][y].height?255:0;
         pixels[x*4+1]=terrain[x][y].height/4;
+        pixels[x*4+2]=terrain[x][y].sediment/4;
         }
     pixels+=screen->pitch;
     }
@@ -98,12 +103,30 @@ int x,y,i;
     }
 }
 
+
+void wave_erosion()
+{
+int x,y;
+    for(y=1;y<SIZE;y++)
+    {
+    int wave_strength=0;
+        for(x=0;x<SIZE;x++)
+        {
+            if(terrain[x][y].water_level>terrain[x][y].height)wave_strength++;
+            else if(wave_strength>0)
+            {
+            wave_strength/=20;
+            terrain[x][y].height-=wave_strength;
+            terrain[x-1][y].sediment+=wave_strength;
+            wave_strength=0;
+            }
+        }
+    }
+}
+
 void do_step()
 {
-terrain[100][101].height++;
-terrain[100][100].height++;
-terrain[101][101].height++;
-terrain[101][100].height++;
+wave_erosion();
 angle_of_repose();
 }
 
@@ -111,6 +134,7 @@ int main(int argc,char* argv[])
 {
 SDL_Surface* screen=SDL_SetVideoMode(SIZE,SIZE,32,SDL_DOUBLEBUF);
     if(screen==NULL)return 1;
+init_terrain();
 
     while(!SDL_GetKeyState(NULL)[SDLK_SPACE])
     {
