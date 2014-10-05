@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <SDL/SDL.h>
 #define SIZE 256
-
+#define POINT_SPACING 128
 typedef struct
 {
 int height;
@@ -32,7 +32,7 @@ int y,x;
     {
         for(x=0;x<SIZE;x++)
         {
-        pixels[x*4+1]=terrain[x][y].height;
+        pixels[x*4+1]=terrain[x][y].height/4;
         }
     pixels+=screen->pitch;
     }
@@ -41,10 +41,10 @@ SDL_UnlockSurface(screen);
 
 
 
-const char neighbour_offsets[8][2]={{-1,1},{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0}};
+const char neighbour_offsets[8][2]={{1,0},{0,1},{0,-1},{-1,0},{-1,1},{1,1},{1,-1},{-1,-1}};
 
 //Limits the slope of terrain by allowing material to run down to lower elevations
-#define MAX_GRADIENT 2
+#define MAX_GRADIENT POINT_SPACING
 
 void angle_of_repose()
 {
@@ -57,6 +57,11 @@ int x,y,i;
         for(i=0;i<8;i++)
         {
         int slope=terrain[x][y].height-terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height;
+            if(i>3)
+            {
+            slope*=70;
+            slope/=99;
+            }
             if(slope>max_slope)
             {
             max_slope=slope;
@@ -71,7 +76,13 @@ int x,y,i;
         int transfer_square=rand()%number_equal;//TODO-fix modulo bias
             for(i=0;i<8;i++)
             {
-                if(terrain[x][y].height-terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height==max_slope)
+            int slope=terrain[x][y].height-terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height;
+                if(i>3)
+                {
+                slope*=70;
+                slope/=99;
+                }
+                if(slope==max_slope)
                 {
                     if(transfer_square==0)
                     {
@@ -106,9 +117,10 @@ SDL_Surface* screen=SDL_SetVideoMode(SIZE,SIZE,32,SDL_DOUBLEBUF);
     SDL_PumpEvents();
     draw_terrain(screen);
     do_step();
+    do_step();
+    do_step();
     SDL_Flip(screen);
     }
 
-getchar();
 return 0;
 }
