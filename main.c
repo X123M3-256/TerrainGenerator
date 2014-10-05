@@ -137,14 +137,36 @@ int x,y,i;
     }
 }
 
+//Calculates sediment deposition
+void deposit_sediment()
+{
+int x,y;
+    for(y=0;y<SIZE;y++)
+    for(x=0;x<SIZE;x++)
+    {
+    int depth=terrain[x][y].water_level-terrain[x][y].height;
+        if(depth<=0)continue;
+        //if(terrain[x][y].wave_strength<10)
+    int density=terrain[x][y].sediment/depth;
+    int capacity=terrain[x][y].wave_strength;
+        if(density>capacity)
+        {
+        int excess=terrain[x][y].sediment-(depth*capacity);
+        terrain[x][y].sediment-=excess;
+        terrain[x][y].height+=excess;
+        }
+    }
+}
+
 void wave_erosion()
 {
 int x,y;
-    for(y=1;y<SIZE;y++)
+    for(y=0;y<SIZE;y++)
     {
     int wave_strength=0;
         for(x=0;x<SIZE;x++)
         {
+        terrain[x][y].wave_strength=wave_strength;
             if(terrain[x][y].water_level>terrain[x][y].height)wave_strength++;
             else if(wave_strength>0)
             {
@@ -161,6 +183,7 @@ void do_step()
 {
 wave_erosion();
 diffuse_sediment();
+deposit_sediment();
 angle_of_repose();
 }
 
