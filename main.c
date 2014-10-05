@@ -89,7 +89,10 @@ int x,y,i;
 
 void do_step()
 {
+terrain[100][101].height++;
 terrain[100][100].height++;
+terrain[101][101].height++;
+terrain[101][100].height++;
 angle_of_repose();
 }
 
