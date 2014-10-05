@@ -101,7 +101,7 @@ int main(int argc,char* argv[])
 SDL_Surface* screen=SDL_SetVideoMode(SIZE,SIZE,32,SDL_DOUBLEBUF);
     if(screen==NULL)return 1;
 
-    while(1)
+    while(!SDL_GetKeyState(NULL)[SDLK_SPACE])
     {
     SDL_PumpEvents();
     draw_terrain(screen);
