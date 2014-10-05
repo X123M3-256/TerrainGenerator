@@ -44,11 +44,11 @@ SDL_UnlockSurface(screen);
 const char neighbour_offsets[8][2]={{-1,1},{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0}};
 
 //Limits the slope of terrain by allowing material to run down to lower elevations
-#define MAX_GRADIENT 1
+#define MAX_GRADIENT 2
 
 void angle_of_repose()
 {
-int x,y;
+int x,y,i;
     for(x=1;x<SIZE-1;x++)
     for(y=1;y<SIZE-1;y++)
     {
@@ -56,20 +56,41 @@ int x,y;
     int number_equal=0;
         for(i=0;i<8;i++)
         {
-        int slope=terrain[x][y].height-terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]];
+        int slope=terrain[x][y].height-terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height;
             if(slope>max_slope)
             {
-            max_slope=
+            max_slope=slope;
             number_equal=1;
             }
+            else if(slope==max_slope)number_equal++;
         }
-    terrain[x][y].height=100;
+
+        if(max_slope>MAX_GRADIENT)
+        {
+        //Randomly select a square to transfer to
+        int transfer_square=rand()%number_equal;//TODO-fix modulo bias
+            for(i=0;i<8;i++)
+            {
+                if(terrain[x][y].height-terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height==max_slope)
+                {
+                    if(transfer_square==0)
+                    {
+                    terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height++;
+                    terrain[x][y].height--;
+                    break;
+                    }
+                transfer_square--;
+                }
+            }
+        }
+
     }
 }
 
 void do_step()
 {
 terrain[100][100].height++;
+angle_of_repose();
 }
 
 int main()
@@ -82,7 +103,6 @@ SDL_Surface* screen=SDL_SetVideoMode(SIZE,SIZE,32,SDL_DOUBLEBUF);
     draw_terrain(screen);
     do_step();
     SDL_Flip(screen);
-    usleep(5000);
     }
 
 getchar();
