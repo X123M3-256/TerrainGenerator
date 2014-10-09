@@ -25,11 +25,13 @@ int x,y;
     for(y=0;y<SIZE;y++)
     {
     terrain_buffer1[x][y].height=x>150?2000:0;
-    terrain_buffer1[x][y].water_level=10;
+    terrain_buffer1[x][y].water_level=terrain_buffer1[x][y].height;
     terrain_buffer2[x][y].height=x>150?2000:0;
-    terrain_buffer2[x][y].water_level=10;
+    terrain_buffer2[x][y].water_level=terrain_buffer1[x][y].height;
     }
-terrain_buffer1[200][128].precipitation=10;
+terrain_buffer1[170][128].precipitation=150;
+terrain_buffer2[170][128].precipitation=150;
+
 terrain=terrain_buffer1;
 next_terrain=terrain_buffer2;
 }
@@ -44,8 +46,8 @@ int y,x;
     {
         for(x=0;x<SIZE;x++)
         {
-        pixels[x*4]=terrain[x][y].water_level>terrain[x][y].height?255:0;
-        pixels[x*4+1]=terrain[x][y].height/4;
+        pixels[x*4]=terrain[x][y].water_level>terrain[x][y].height?terrain[x][y].water_level:0;//>terrain[x][y].height?255:0;
+        pixels[x*4+1]=terrain[x][y].water_level>terrain[x][y].height?0:terrain[x][y].height/4;
         pixels[x*4+2]=terrain[x][y].sediment;
         }
     pixels+=screen->pitch;
@@ -188,19 +190,40 @@ int x,y;
     }
 }
 
+
 void calculate_water()
 {
-int x,y;
+int x,y,i;
     for(x=1;x<SIZE-1;x++)
     for(y=1;y<SIZE-1;y++)
     {
-    next_terrain[x][y].water_level+=terrain[x][y].precipitation;
+    //Add flows from neighbouring cells
+    int net_flow=terrain[x][y].precipitation;
+        for(i=0;i<8;i++)
+        {
+        terrain_cell_t* neighbour=&terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]];
+        int slope=terrain[x][y].water_level-neighbour->water_level;
+
+        //Water cannot flow out of a cell that doesn't have any water
+            if(slope<0&&neighbour->height>=neighbour->water_level)continue;
+
+            if(i>3)
+            {
+            slope*=70;
+            slope/=99;
+            }
+        net_flow-=slope/8;
+        }
+    next_terrain[x][y].water_level+=net_flow;
+    //Don't allow the water level to drop below the land level
+        if(next_terrain[x][y].water_level<next_terrain[x][y].height)next_terrain[x][y].water_level=next_terrain[x][y].height;
     }
 }
 
 void do_step()
 {
 angle_of_repose();
+calculate_water();
 }
 
 void flip_buffers()
