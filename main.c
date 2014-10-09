@@ -12,8 +12,10 @@ int sediment;
 int wave_strength;
 }terrain_cell_t;
 
-terrain_cell_t terrain[SIZE][SIZE];
-
+terrain_cell_t terrain_buffer1[SIZE][SIZE];
+terrain_cell_t terrain_buffer2[SIZE][SIZE];
+terrain_cell_t (*terrain)[SIZE];
+terrain_cell_t (*next_terrain)[SIZE];
 
 void init_terrain()
 {
@@ -21,9 +23,13 @@ int x,y;
     for(x=0;x<SIZE;x++)
     for(y=0;y<SIZE;y++)
     {
-    terrain[x][y].height=x>40&&x<60&&y>40&&y<60?2000:0;
-    terrain[x][y].water_level=10;
+    terrain_buffer1[x][y].height=x>150?2000:0;
+    terrain_buffer1[x][y].water_level=10;
+    terrain_buffer2[x][y].height=x>150?2000:0;
+    terrain_buffer2[x][y].water_level=10;
     }
+terrain=terrain_buffer1;
+next_terrain=terrain_buffer2;
 }
 
 
@@ -90,10 +96,11 @@ int x,y,i;
                 }
                 if(slope==max_slope)
                 {
+                int diff=(slope-MAX_GRADIENT+1)/2;
                     if(transfer_square==0)
                     {
-                    terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height++;
-                    terrain[x][y].height--;
+                    next_terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height+=diff;
+                    next_terrain[x][y].height-=diff;
                     break;
                     }
                 transfer_square--;
@@ -181,10 +188,24 @@ int x,y;
 
 void do_step()
 {
-wave_erosion();
-diffuse_sediment();
-deposit_sediment();
 angle_of_repose();
+}
+
+void flip_buffers()
+{
+int x,y;
+terrain_cell_t (*temp)[SIZE];
+
+    for(y=0;y<SIZE;y++)
+    for(x=0;x<SIZE;x++)
+    {
+    terrain[x][y].height=next_terrain[x][y].height;
+    terrain[x][y].water_level=next_terrain[x][y].water_level;
+    }
+
+temp=terrain;
+terrain=next_terrain;
+next_terrain=temp;
 }
 
 int main(int argc,char* argv[])
@@ -198,8 +219,7 @@ init_terrain();
     SDL_PumpEvents();
     draw_terrain(screen);
     do_step();
-    do_step();
-    do_step();
+    flip_buffers();
     SDL_Flip(screen);
     }
 
