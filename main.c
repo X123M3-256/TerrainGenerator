@@ -8,6 +8,7 @@ typedef struct
 {
 int height;
 int water_level;
+int precipitation;
 int sediment;
 int wave_strength;
 }terrain_cell_t;
@@ -28,6 +29,7 @@ int x,y;
     terrain_buffer2[x][y].height=x>150?2000:0;
     terrain_buffer2[x][y].water_level=10;
     }
+terrain_buffer1[200][128].precipitation=10;
 terrain=terrain_buffer1;
 next_terrain=terrain_buffer2;
 }
@@ -186,6 +188,16 @@ int x,y;
     }
 }
 
+void calculate_water()
+{
+int x,y;
+    for(x=1;x<SIZE-1;x++)
+    for(y=1;y<SIZE-1;y++)
+    {
+    next_terrain[x][y].water_level+=terrain[x][y].precipitation;
+    }
+}
+
 void do_step()
 {
 angle_of_repose();
@@ -199,8 +211,7 @@ terrain_cell_t (*temp)[SIZE];
     for(y=0;y<SIZE;y++)
     for(x=0;x<SIZE;x++)
     {
-    terrain[x][y].height=next_terrain[x][y].height;
-    terrain[x][y].water_level=next_terrain[x][y].water_level;
+    terrain[x][y]=next_terrain[x][y];
     }
 
 temp=terrain;
