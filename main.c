@@ -3,11 +3,19 @@
 #include <stdlib.h>
 #include <SDL/SDL.h>
 #define SIZE 256
-#define POINT_SPACING 128
+#define CELL_WIDTH 128
+
 typedef struct
 {
-double height;
-double water_depth;
+float height;
+    struct
+    {
+    float depth;
+    float outflow_flux[4];
+    float velocity_x;
+    float velocity_y;
+    }water;
+
 double precipitation;
 int sediment;
 int wave_strength;
@@ -20,17 +28,25 @@ terrain_cell_t (*next_terrain)[SIZE];
 
 void init_terrain()
 {
+FILE* file=fopen("mountains.data","r");
 int x,y;
     for(x=0;x<SIZE;x++)
     for(y=0;y<SIZE;y++)
     {
-    terrain_buffer1[x][y].height=x>150?(x-150)*20:0;
-    terrain_buffer1[x][y].water_depth=0;//x<140:100:0;
-    terrain_buffer1[x][y].precipitation=0;//x<140?10:0;
+    terrain_buffer1[x][y].height=fgetc(file);
+    terrain_buffer1[x][y].water.depth=(x==0||x==SIZE-1||y==0||y==SIZE-1)?100:0;
+    terrain_buffer1[x][y].water.outflow_flux[0]=0;
+    terrain_buffer1[x][y].water.outflow_flux[1]=0;
+    terrain_buffer1[x][y].water.outflow_flux[2]=0;
+    terrain_buffer1[x][y].water.outflow_flux[3]=0;
+    terrain_buffer1[x][y].precipitation=0.0001;
     terrain_buffer2[x][y]=terrain_buffer1[x][y];
     }
-terrain_buffer1[200][128].precipitation=1500;
-terrain_buffer2[200][128].precipitation=1500;
+fclose(file);
+
+
+//terrain_buffer1[150][150].precipitation=15;
+//terrain_buffer2[150][150].precipitation=15;
 
 terrain=terrain_buffer1;
 next_terrain=terrain_buffer2;
@@ -46,8 +62,8 @@ int y,x;
     {
         for(x=0;x<SIZE;x++)
         {
-        pixels[x*4]=terrain[x][y].water_depth>0?(terrain[x][y].water_depth+terrain[x][y].height)/4:0;//>terrain[x][y].height?255:0;
-        pixels[x*4+1]=terrain[x][y].water_depth>0?0:terrain[x][y].height/4;
+        pixels[x*4]=terrain[x][y].water.depth*10;//>0?255:0;//(terrain[x][y].water_depth+terrain[x][y].height)/4:0;//>terrain[x][y].height?255:0;
+        pixels[x*4+1]=terrain[x][y].water.depth>0.01?0:terrain[x][y].height;
         pixels[x*4+2]=terrain[x][y].sediment;
         }
     pixels+=screen->pitch;
@@ -58,9 +74,14 @@ SDL_UnlockSurface(screen);
 
 
 const char neighbour_offsets[8][2]={{1,0},{0,1},{0,-1},{-1,0},{-1,1},{1,1},{1,-1},{-1,-1}};
+#define LEFT 3
+#define RIGHT 0
+#define TOP 2
+#define BOTTOM 1
+
 
 //Limits the slope of terrain by allowing material to run down to lower elevations
-#define MAX_GRADIENT POINT_SPACING
+#define MAX_GRADIENT CELL_WIDTH
 
 void angle_of_repose()
 {
@@ -114,7 +135,7 @@ int x,y,i;
 
     }
 }
-
+/*
 //Causes sediment to diffuse to neighbouring squares of a lower concentration
 void diffuse_sediment()
 {
@@ -192,49 +213,73 @@ int x,y;
 }
 */
 
-double calculate_flow(terrain_cell_t* cell,terrain_cell_t* neighbour,int is_diagonal)
-{
-double slope=neighbour->water_depth-cell->water_depth+neighbour->height-cell->height;
-            if(is_diagonal)slope*=70.0/99.0;
 
-    if((slope<=0&&cell->water_depth<=0)||(slope>0&&neighbour->water_depth<=0))return 0;
-
-return slope;//*(neighbour->water_depth+cell->water_depth)*0.5;
-}
-
-void calculate_water()
+void calculate_precipitation(float delta_t)
 {
 int x,y,i;
     for(x=1;x<SIZE-1;x++)
     for(y=1;y<SIZE-1;y++)
     {
-    //Add flows from neighbouring cells
-    double net_flow=terrain[x][y].precipitation;
-        for(i=0;i<8;i++)
+    terrain[x][y].water.depth+=delta_t*terrain[x][y].precipitation;
+    }
+}
+#define PIPE_AREA 100
+#define PIPE_LENGTH 1
+void calculate_water(float delta_t)
+{
+int x,y,i;
+    for(x=1;x<SIZE-1;x++)
+    for(y=1;y<SIZE-1;y++)
+    {
+    terrain_cell_t* cur_cell=&terrain[x][y];
+    //Compute the flow rate from the current cell to each of it's neighbours
+    float total_flux=0;
+        for(i=0;i<4;i++)
         {
-        net_flow+=calculate_flow(&terrain[x][y],&terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]],i>3);
+        terrain_cell_t* neighbour=&terrain[x+neighbour_offsets[i][0]][y+neighbour_offsets[i][1]].height;
+        cur_cell->water.outflow_flux[i]+=delta_t*PIPE_AREA*(9.81*(cur_cell->water.depth-neighbour->water.depth+cur_cell->height-neighbour->height))/PIPE_LENGTH;
+            if(cur_cell->water.outflow_flux[i]<0)cur_cell->water.outflow_flux[i]=0;
+        total_flux+=cur_cell->water.outflow_flux[i];
         }
-    next_terrain[x][y].water_depth+=net_flow/8;
-    //Don't allow the water level to drop below the land level
-        if(next_terrain[x][y].water_depth<0)next_terrain[x][y].water_depth=0;
-    next_terrain[x][y].height-=net_flow*0.01;
+    //Compute the scale factor required to prevent negative depth
+    float scale_factor=(cur_cell->water.depth*CELL_WIDTH*CELL_WIDTH)/(total_flux*delta_t);
+        if(scale_factor>1||total_flux==0)scale_factor=1;
+    //Scale flow values for each neighbour by scale factor
+        for(i=0;i<4;i++)cur_cell->water.outflow_flux[i]*=scale_factor;
     }
-    for(x=0;x<SIZE;x++)
+
+    for(x=1;x<SIZE-1;x++)
+    for(y=1;y<SIZE-1;y++)
     {
-    next_terrain[x][0].water_depth=next_terrain[x][1].water_depth;
-    next_terrain[x][SIZE-1].water_depth=next_terrain[x][SIZE-2].water_depth;
-    }
-    for(y=0;y<SIZE;y++)
-    {
-    next_terrain[0][y].water_depth=next_terrain[1][y].water_depth;
-    next_terrain[SIZE-1][y].water_depth=next_terrain[SIZE-2][y].water_depth;
+    terrain_cell_t* cur_cell=&terrain[x][y];
+    //Update the water height for each cell based on flow rates between it and it's neighbours
+    float delta_v=0;//V stands for volume. Not velocity
+    delta_v+=terrain[x][y+1].water.outflow_flux[TOP];
+    delta_v+=terrain[x][y-1].water.outflow_flux[BOTTOM];
+    delta_v+=terrain[x+1][y].water.outflow_flux[LEFT];
+    delta_v+=terrain[x-1][y].water.outflow_flux[RIGHT];
+    delta_v-=cur_cell->water.outflow_flux[TOP];
+    delta_v-=cur_cell->water.outflow_flux[BOTTOM];
+    delta_v-=cur_cell->water.outflow_flux[LEFT];
+    delta_v-=cur_cell->water.outflow_flux[RIGHT];
+    delta_v*=delta_t;
+    float average_depth=terrain[x][y].water.depth;
+    terrain[x][y].water.depth=cur_cell->water.depth+(delta_v/(CELL_WIDTH*CELL_WIDTH));
+    average_depth=(average_depth+terrain[x][y].water.depth)/2;//Needed for next step
+
+    //Now compute velocity field of water from flow rates
+    float flow_x=(terrain[x-1][y].water.outflow_flux[RIGHT]-cur_cell->water.outflow_flux[LEFT]+cur_cell->water.outflow_flux[RIGHT]-terrain[x+1][y].water.outflow_flux[LEFT])/2.0;
+    float flow_y=(terrain[x][y-1].water.outflow_flux[BOTTOM]-cur_cell->water.outflow_flux[TOP]+cur_cell->water.outflow_flux[BOTTOM]-terrain[x][y+1].water.outflow_flux[TOP])/2.0;
+    terrain[x][y].water.velocity_x=flow_x/(average_depth*CELL_WIDTH);
+    terrain[x][y].water.velocity_y=flow_y/(average_depth*CELL_WIDTH);
     }
 }
 
 void do_step()
 {
-angle_of_repose();
- calculate_water();
+//angle_of_repose();
+calculate_precipitation(1);
+calculate_water(1);
 }
 
 void flip_buffers()
@@ -264,7 +309,6 @@ init_terrain();
     SDL_PumpEvents();
     draw_terrain(screen);
     do_step();
-    flip_buffers();
     SDL_Flip(screen);
     }
 
